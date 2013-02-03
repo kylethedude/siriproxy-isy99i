@@ -10,176 +10,179 @@ class SiriProxy::Plugin::Isy99i < SiriProxy::Plugin
   attr_accessor :password
   attr_accessor :username
   attr_accessor :host
-  attr_accessor :yourname
+  
+  # Some commonly used constants
+  YES = "yes|sure|yep|yup|yea|yeah|whatever|why not|ok|i guess"
   
   def initialize(config)  
-    self.password = config["password"]
-    self.username = config["username"]
-    self.host = config["host"]
-    self.yourname = config["yourname"]
-    @auth = {:username => "#{self.username}", :password => "#{self.password}"}
+    # Setup the Rest Class that is used for all communications with the ISY
+    Rest.instance.setConnParameters(config["host"], config["username"], config["password"])
+    
+    # Create an instance of the Devices Class to manage your devices. Pass in the devices set in the config.yml
+    @myDevices = Devices.new(config["devices"])
+    
+    puts "**[ISY-99i Module Loaded]**"
   end
-
-  class Rest
-    include HTTParty
-    format :xml
-  end
-
-
-  listen_for(/merry christmas/i) {merry_christmas}
-  listen_for(/scrooge|turn off tree|turn off christmas lights/i) {scrooge}
-  listen_for(/ready to go|leave/i) {open_small_garage_door}
-  listen_for(/pulling (in|up|in the driveway)/i) {open_small_garage_door}
-  listen_for(/close the garage door/i) {close_small_garage_door}
-  listen_for (/cooling.*([0-9]{2})|cool setpoint.*([0-9]{2})|cooling setpoint.*([0-9]{2})/i) { |cooling_temp| set_cool_temp(cooling_temp) }
-  listen_for (/heat.*([0-9]{2})|heating.*([0-9]{2})|heat setpoint.*([0-9]{2})|heating setpoint.*([0-9]{2})/i) { |heating_temp| set_heat_temp(heating_temp) }
-  #listen_for(/test|text/i) {test}
+  
+  #listen_for(/good night|goodnight/i) {good_night()}
+  #listen_for(/good morning/i) {good_morning()}
+  #listen_for(/ready to go|leave/i) {open_garage_door}
+  #listen_for(/close the garage door/i) {close_garage_door}
+  #listen_for (/cooling.*([0-9]{2})|cool setpoint.*([0-9]{2})|cooling setpoint.*([0-9]{2})/i) { |cooling_temp| set_cool_temp(cooling_temp) }
+  #listen_for (/heat.*([0-9]{2})|heating.*([0-9]{2})|heat setpoint.*([0-9]{2})|heating setpoint.*([0-9]{2})/i) { |heating_temp| set_heat_temp(heating_temp) }
+  #listen_for(/i'm cold|i am cold/i) {increment_heat_temp()}
+  #listen_for(/i'm hot|i am hot/i) {decrement_cool_temp()}
 
   listen_for (/turn on (.*)/i) do |device|
     deviceName = URI.unescape(device.strip)
-    @dimmable = 0 #sets default as non-dimmable - must be set to 1 in devices file otherwise
-    deviceAddress = deviceCrossReference(deviceName)
-      if deviceAddress.is_a?(Numeric)
-        scene = 1
-      end
-    puts "deviceName = #{deviceName}"
-    puts "deviceAddress = #{deviceAddress}"
-    puts "scene = #{scene}"
-    if deviceAddress != 0
-      check_status = Rest.get("#{self.host}/rest/status/#{deviceAddress}", :basic_auth => @auth).inspect
-      status = check_status.gsub(/^.*tted"=>"/, "")
-      status = status.gsub(/", "uom.*$/, "")
-      status_dimmer = status.to_i
-        if status_dimmer > 0
-          say "Status of #{deviceName} is already On, and it's set to #{status_dimmer}%"
-          response = ask "Would you like to adjust the brightness settings?"
-            if (response =~ /yes|sure|yep|yeah|whatever|why not|ok|I guess/i)
-              dim_percent = ask "OK. What percentage would you like me to set #{deviceName} to?"
-              dim_percent_adj = dim_percent.to_i * 2.55 #converts percent to 0-255 setpoint
-              dim_percent_adj = dim_percent_adj.to_i
-              say "I am setting #{deviceName} to #{dim_percent.to_i}%."
-              Rest.get("#{self.host}/rest/nodes/#{deviceAddress}/cmd/DON/#{dim_percent_adj}", :basic_auth => @auth)
-            else say "OK.  Suit yourself"
+    device = @myDevices.findDevice(deviceName)
+    
+    if (!device.nil? && device.deviceAddress != 0)
+        puts "[[turn on]] deviceName => #{deviceName}, deviceAddress => #{device.deviceAddress}";
+        if (device.getOnOffStatus == "On")
+            if (device.isDimmable)
+                if (device.getOnLevel == 100)
+                    response = ask "This device is already On, and it's set to 100%. Do you want to change the level?"
+                    if (response =~ /#{YES}/i)
+                        level = ask "OK. What level would you like to set #{deviceName} to?"
+                        say "Setting #{deviceName} to #{level.to_i}%."
+                        device.setOnLevel(level)
+                    else
+                        say "OK. No adjustment will occur."
+                    end
+                else
+                    say "#{deviceName} is already On, and set to #{device.getOnLevel.to_s}%"
+                    response = ask "Would you like to adjust the brightness?"
+                    if (response =~ /#{YES}/i)
+                        level = ask "OK. What level would you like to set #{deviceName} to?"
+                        say "Setting #{deviceName} to #{level}%."
+                        device.setOnLevel(level)
+                    else 
+                        say "OK. No adjustment will occur."
+                    end
+                end
+            else
+                say "#{deviceName} is already On"
             end
-        elsif status == "Off" || scene == 1
-          if @dimmable == 1
-            dim_percent = ask "This device is dimmable.  What would you like to set the level to?"
-            dim_percent_adj = dim_percent.to_i * 2.55 #converts percent to 0-255 setpoint
-            dim_percent_adj = dim_percent_adj.to_i
-            say "I am setting #{deviceName} to #{dim_percent.to_i}%."
-            Rest.get("#{self.host}/rest/nodes/#{deviceAddress}/cmd/DON/#{dim_percent_adj}", :basic_auth => @auth)
-          else say "I am turning on #{deviceName} now."
-            Rest.get("#{self.host}/rest/nodes/#{deviceAddress}/cmd/DON", :basic_auth => @auth)
-          end
-        elsif status == "On"
-          if @dimmable == 1
-            response = ask "This device is already On, and it's set to 100%. Do you want to change the level?"
-              if (response =~ /yes|sure|yep|yeah|whatever|why not|ok|I guess/i)
-                dim_percent = ask "OK. What percentage would you like me to set #{deviceName} to?"
-                dim_percent_adj = dim_percent.to_i * 2.55 #converts percent to 0-255 setpoint
-                dim_percent_adj = dim_percent_adj.to_i
-                say "I am setting #{deviceName} to #{dim_percent.to_i}%."
-                Rest.get("#{self.host}/rest/nodes/#{deviceAddress}/cmd/DON/#{dim_percent_adj}", :basic_auth => @auth)
-              else say "OK.  Suit yourself"
-              end
-          else say "But #{self.yourname}, that device is already On"
-          end
-        else status = "error"
-             say "I'm sorry #{self.yourname}, but there seems to be an error and I am currently unable to control #{deviceName}"
+        elsif (device.getOnOffStatus == "Off" || device.isScene)
+            if (device.isDimmable)
+                level = ask "This device is dimmable.  What would you like to set the level to?"
+                say "Setting #{deviceName} to #{level.to_i}%."
+                device.setOnLevel(level)
+            else 
+                say "Turning on #{deviceName} now."
+                device.turnFastOn
+            end
+        else
+            say "Sorry. I'm having a difficult time controlling #{deviceName}."
         end
-    else say "I'm sorry, but I am not programmed to control #{deviceName}."
+    else 
+        say "I'm sorry, but I cannot control #{deviceName}."
     end
     request_completed
   end
 
+ 
   listen_for (/turn off (.*)/i) do |device|
     deviceName = URI.unescape(device.strip)
-    deviceAddress = deviceCrossReference(deviceName)
-      if deviceAddress.is_a?(Numeric)
-        scene = 1
-      end
-    puts "deviceName = #{deviceName}"
-    puts "deviceAddress = #{deviceAddress}"
-    puts "scene = #{scene}"
-      if deviceAddress != 0
-        check_status = Rest.get("#{self.host}/rest/status/#{deviceAddress}", :basic_auth => @auth).inspect
-        status = check_status.gsub(/^.*tted"=>"/, "")
-        status = status.gsub(/", "uom.*$/, "")
-        puts "status = #{status}"
-          if status == "On" || (status.to_i >= 1 && status.to_i <= 100) || scene == 1
-            say "I am now turning off #{deviceName}."
-            Rest.get("#{self.host}/rest/nodes/#{deviceAddress}/cmd/DOF", :basic_auth => @auth)
-          elsif status == "Off"
-            say "But #{self.yourname}, that device is already off"
-          else status = "error"
-            say "I'm sorry #{self.yourname}, but there seems to be an error and I am currently unable to control #{deviceName}"
-          end
-        else say "I'm sorry, but I am not programmed to control #{deviceName}."
-          #say "#{anything_else}?"
-      end
+    device = @myDevices.findDevice(deviceName)
+    
+    if (!device.nil? && device.deviceAddress != 0)
+        status = device.getOnOffStatus
+        puts "[[turn off]] deviceName => #{deviceName}, deviceAddress => #{device.deviceAddress}, status => #{status}";
+        if (status == "On" || device.isScene)
+            say "Turning off #{deviceName}."
+            device.turnOff
+        elsif (status == "Off")
+            say "#{deviceName} is already off."
+        else
+            say "Sorry. I am unable to control #{deviceName}."
+        end
+    else
+        say "Sorry. I am unable to control #{deviceName}."
+    end
     request_completed
   end
 
 
   listen_for (/get status of (.*)/i) do |device|
     deviceName = URI.unescape(device.strip)
-    @dimmable = 0 #sets default as non-dimmable - has to be set to 1 in devices file otherwise
-    deviceAddress = deviceCrossReference(deviceName)
-      if deviceAddress.is_a?(Numeric)
-        scene = 1
-      end
-    puts "deviceName = #{deviceName}"
-    puts "deviceAddress = #{deviceAddress}"
-    puts "scene = #{scene}"
-      if deviceAddress != 0 && scene != 1
-        check_status = Rest.get("#{self.host}/rest/status/#{deviceAddress}", :basic_auth => @auth).inspect
-        status = check_status.gsub(/^.*tted"=>"/, "")
-        status = status.gsub(/", "uom.*$/, "")
-        status_dimmer = status.to_i
-          if status_dimmer > 0
-            say "Status of #{deviceName} is On, and it's set to #{status_dimmer}%"
-          elsif status == "On" || "Off"
-            if @dimmable == 1 && status == "On"
-              say "Status of #{deviceName} is On at 100%"
-            else say "Status of #{deviceName} is #{status}"
+    device = @myDevices.findDevice(deviceName)
+    
+    if (!device.nil? && device.deviceAddress != 0)
+        if (device.isScene)
+            say "No status available for scenes."
+        else
+            onlevel = device.getOnLevel
+            puts "[[status]] deviceName => #{deviceName}, deviceAddress => #{device.deviceAddress}, onLevel => #{onlevel}";
+            if (onlevel == 100)
+                say "#{deviceName} is On."
+            elsif (onlevel == 0)
+                say "#{deviceName} is Off."
+            elsif (onlevel == -1)
+                say "Sorry. I am unable to control #{deviceName}."
+            else
+                say "#{deviceName} is at #{onlevel}%."
             end
-          else status = "error"
-            say "I'm sorry, but there seems to be an error and I am unable to return status for #{deviceName}"
-          end
-      elsif scene == 1
-        say "I'm sorry, but I am unable to retrieve the status of a scene at this time"
-      else say "I'm sorry, but I am not programmed to control #{deviceName}."
-      end
-    request_completed
-  end
-
-
-  listen_for (/(dim|damn|jim|jimmer|turn down|turn up|turnup|set dimmer on|set level on|set the level on) (.*)/i) do |keywords, device|
-    deviceName = URI.unescape(device.strip)
-    @dimmable = 0
-    deviceAddress = deviceCrossReference(deviceName)
-    if deviceAddress != 0
-      check_status = Rest.get("#{self.host}/rest/status/#{deviceAddress}", :basic_auth => @auth).inspect
-      status = check_status.gsub(/^.*tted"=>"/, "")
-      status = status.gsub(/", "uom.*$/, "")
-      status_dimmer = status.to_i
-        if @dimmable == 1
-          dim_percent = ask "What would you like to set the level to?"
-          dim_percent_adj = dim_percent.to_i * 2.55 #converts percent to 0-255 setpoint
-          dim_percent_adj = dim_percent_adj.to_i
-          say "I am setting #{deviceName} to #{dim_percent.to_i}%."
-          Rest.get("#{self.host}/rest/nodes/#{deviceAddress}/cmd/DON/#{dim_percent_adj}", :basic_auth => @auth)
-        elsif @dimmable == 0
-          say "I'm sorry, but #{deviceName} is not dimmable."
-        else status = "error"
-             say "I'm sorry, but there seems to be an error and I am currently unable to control #{deviceName}"
         end
-    else say "I'm sorry, but I am not programmed to control #{deviceName}."
+    else 
+        say "Sorry. I am unable to control #{deviceName}."
     end
     request_completed
   end
 
+  listen_for (/(turn down|turndown|turn up|turnup|set level for|adjust) (.*) to (.*)/i) do |keywords, device, level|
+    deviceName = URI.unescape(device.strip)
+    device = @myDevices.findDevice(deviceName)
+    
+    if (!device.nil? && device.deviceAddress != 0)
+        if (device.isDimmable)
+            setDeviceLevel(device, level)
+        else 
+            say "#{deviceName} is not dimmable."
+        end
+    else 
+        say "Sorry. I am unable to control #{deviceName}."
+    end
+    request_completed
+  end
+  
+  listen_for (/(turn down|turndown|turn up|turnup|set level for|adjust) (.*)/i) do |keywords, device|
+    deviceName = URI.unescape(device.strip)
+    device = @myDevices.findDevice(deviceName)
+    
+    if (!device.nil? && device.deviceAddress != 0)
+        if (device.isDimmable)
+            level = ask "What would you like to set the level to?"
+            setDeviceLevel(device, level)
+        else 
+             say "#{deviceName} is not dimmable."
+        end
+    else 
+        say "Sorry. I am unable to control #{deviceName}."
+    end
+    request_completed
+  end
+  
+  def setDeviceLevel(device, level)
+    if (!device.nil? && device.deviceAddress != 0)
+        if (device.isScene)
+            say "Unable to change the level for a scene."
+        else
+            puts "[[set level]] deviceAddress => #{device.deviceAddress}, newOnLevel => #{level}";
+            if (level <= 100 && level >= 0)
+                device.setOnLevel(level)
+            else
+                say "Sorry, #{level} is not valid."
+            end
+        end
+    else 
+        say "Sorry. I am unable to control #{deviceName}."
+    end
+    request_completed
+  end
 
+=begin 
   listen_for (/temperature.*inside|inside.*temperature|temperature.*in here/i) do 
     deviceName = "thermostat"
     deviceAddress = deviceCrossReference(deviceName)
@@ -213,6 +216,8 @@ class SiriProxy::Plugin::Isy99i < SiriProxy::Plugin
     say "The mode is currently set to #{climd}"
     request_completed 
   end
+
+
 
 
   def set_cool_temp(cooling_temp)
@@ -286,6 +291,15 @@ class SiriProxy::Plugin::Isy99i < SiriProxy::Plugin
       else puts "this ain't workin"
       end
     request_completed
+  end 
+
+  def test
+    response = ask "Do you want to run the test?"
+      if (response =~ /yes|sure|yep|yeah|whatever|why not|ok|I guess/i)
+        say "OK. Running test."
+      else say "Never mind."
+      end
+    request_completed 
   end
-  
+=end
 end
