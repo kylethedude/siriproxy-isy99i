@@ -54,30 +54,30 @@ It may also be helpful to look at this [video by jbaybayjbaybay] (http://www.you
 Configuration
 -------------
 
-**Devices can be added using two different methods:**
+**Devices can be added using two different methods**
 ***1. Listed as an array in the config.yml file***
 
-Under the "devices" configuration item, each device will have 3 parameters:
+****Under the "devices" configuration item, each device will have 3 parameters****
 1. Device name as recongnized by Siri. This can consist of multiple words or phrases seperated by a "|" character.
 2. The Device address. This is either the Insteon address (. is replaced by %20) or the scene number.
 3. Do you want this Device to be dimmable? 1 for yes, 0 for no.
 
-Example:
+****Example****
 Device Name: night light
 Device Address: 1A.EB.C.1
 Is Dimmable: Yes
 
-Result:
+****Result****
 - ["night light|nightlight", "1A%20EB%20C%201", 1]
 
 ***2. Devices can also be added programatically in the module code.***
 
-Example:
+****Example****
 Device Name: night light
 Device Address: 1A.EB.C.1
 Is Dimmable: Yes
 
-Result:
+****Result****
 ```ruby
 @myDevices = Devices.new
 @myDevices.add("night light|nightlight", "1A%20EB%20C%201", 1)
