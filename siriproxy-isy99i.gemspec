@@ -3,10 +3,10 @@ $:.push File.expand_path("../lib", __FILE__)
 
 Gem::Specification.new do |s|
   s.name        = "siriproxy-isy99i"
-  s.version     = "0.0.2" 
-  s.authors     = ["hoopty3"]
+  s.version     = "0.0.1" 
+  s.authors     = ["hoopty3", "elvisimprsntr", "kylethedude"]
   s.email       = [""]
-  s.homepage    = ""
+  s.homepage    = "https://github.com/kylethedude/siriproxy-isy99i"
   s.summary     = %q{Siri Proxy ISY-99i Plugin}
   s.description = %q{This is a plugin that lets users interact with their ISY-99i through Siri. }
 
@@ -18,8 +18,5 @@ Gem::Specification.new do |s|
   s.require_paths = ["lib"]
 
   # specify any dependencies here; for example:
-  # s.add_development_dependency "rspec"
-  # s.add_runtime_dependency "rest-client"
-  # s.add_runtime_dependency "json"
   s.add_runtime_dependency "httparty"
 end
