@@ -14,13 +14,22 @@ What makes this plugin different? Abstraction. My goal of this project was to ma
 
 Currently, this is an early, but functional preview.
 
+Changelog
+---------
+**Version 0.0.1** 
+
+- Initial Creation
+
+**Version 0.0.2** 
+
+- Added auto-discovery of controllable devices
+
 TODO (in no particular order)
 -----------------------------
 1. Finish ELK integration with ISY-99i ELK Module
 2. Add support for ELK Thermostats including multiple thermostat support
 3. Merge in elvisimprsntr's IP Cam logic
-4. Figure out a way to get status of scenes
-5. Create better documentation
+4. Create better documentation
 
 I'm also welcome to other ideas to make this module fully rounded.
 
@@ -33,8 +42,8 @@ Once SiriProxy is up and running, you'll want to add the siriproxy-isy99i plugin
 
 It may also be helpful to look at this [video by jbaybayjbaybay] (http://www.youtube.com/watch?v=A48SGUt_7lw) as it's the one I used to figure this process out.  The video includes info on creating a new plugin and editing the files, which can be helpful when it comes to experimenting with your own plugins, but it won't be necessary in order to just install this plugin.  So, I'll skip those particular instructions below.
 
-1.  Download the repository as a [zip file] (https://github.com/hoopty3/siriproxy-isy99i/zipball/master).
-2.  Extract the full directory (i.e. hoopty3-siriproxy-isy99i-######) to `~/.rvm/gems/ruby-1.9.3-p0@SiriProxy/gems/siriproxy-0.3.0/plugins` and rename it siriproxy-isy99i. You will need to go to View and select 'Show Hidden Files' in order to see .rvm directory.
+1.  Download the repository as a [zip file] (https://github.com/kylethedude/siriproxy-isy99i/zipball/master).
+2.  Extract the full directory (i.e. kylethedude-siriproxy-isy99i-######) to `~/.rvm/gems/ruby-1.9.3-p0@SiriProxy/gems/siriproxy-0.0.2/plugins` and rename it siriproxy-isy99i. You will need to go to View and select 'Show Hidden Files' in order to see .rvm directory.
 3.  Navigate to the `siriproxy-isy99i/lib` directory and open devices.rb for editing.  Gedit works just fine.
 4.  Here you will need to enter your specific device info, such as what you will call them and their addresses.  This file is populated with examples and should be pretty self explanatory.  
 5.  If a device is dimmable, set the @dimmable variable to 1, otherwise it is not necessary or should be set to some number other than 1.  You can control devices or scenes, but you cannot currently get the status of a scene (that's on the to do list).
@@ -54,9 +63,9 @@ It may also be helpful to look at this [video by jbaybayjbaybay] (http://www.you
 Configuration
 -------------
 
-**Devices can be added using two different methods**
+**Devices can be added using three different methods**
 
-***1. Listed as an array in the config.yml file***
+***1. Manually listed as an array in the config.yml file***
 
 Under the "devices" configuration item, each device will have 3 parameters
 
@@ -75,7 +84,16 @@ Under the "devices" configuration item, each device will have 3 parameters
 >- ["night light|nightlight", "1A%20EB%20C%201", 1]
 >```
 
-***2. Devices can also be added programatically in the module code.***
+***2. The plugin will scan the active devices reported by the ISY-99i and add them automatically.***
+
+Any device added manually using method #1 above will NOT be overwritten by this automatic process. This allows you to customize the device setup and still take advantage of the auto-discovery feature. This is useful if you want a device to be recongnized by multiple phrases or wish to treat a dimmable device as non-dimmable so Siri doesn't ask to adjust On Levels.
+
+>```ruby
+>@myDevices = Devices.new
+>@myDevices.addActiveDevices
+>```
+
+***3. Devices can be added programatically in the plugin code.***
 
 ***Example***
 >- Device Name: night light
@@ -115,8 +133,11 @@ Usage
 Licensing
 ---------
 
-Re-use of my code is fine under a Creative Commons 3.0 [Non-commercial, Attribution, Share-Alike](http://creativecommons.org/licenses/by-nc-sa/3.0/) license. In short, this means that you can use my code, modify it, do anything you want. Just don't sell it and make sure to give me a shout-out. Also, you must license your derivatives under a compatible license (sorry, no closed-source derivatives). If you would like to purchase a more permissive license (for a closed-source and/or commercial license), please contact me directly. See the Creative Commons site for more information.
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program.  If not, see [http://www.gnu.org/licenses/](http://www.gnu.org/licenses/).
 
 Disclaimer
 ----------
