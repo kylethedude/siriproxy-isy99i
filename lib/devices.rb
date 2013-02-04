@@ -7,6 +7,10 @@ class Devices
   DEVICENAME = 0
   DEVICEID = 1
   DIMMABLE = 2
+  
+  # These Device Types will be automatically added to the Device List
+  #     Dimmable, Switched/Relay, Irrigation, Climate, Pool Control, Sensors, Energy Management, Windows/Shades, Access Control, Security, X10
+  CONTROLLABLE = ["1","2","4","5","6","7","9","14","15","16","113"]
  
   def initialize(d)
     # A multdimensional array where each element is an array consisting of 4 elements:
@@ -24,6 +28,33 @@ class Devices
     @devices << [deviceName, deviceId, isDimmable]
   end
   
+  def addActiveDevices
+    nodes = Rest.get("#{Rest.instance.host}/rest/nodes", :basic_auth => Rest.instance.auth).parsed_response["nodes"] 
+    
+    # Add Devices
+    nodes["node"].each do |node|
+        deviceId = formatDeviceId(node["address"])
+        
+        if (node["enabled"] == "true" && !deviceExists(deviceId) && isControllable(node["type"])) 
+            name = node["name"].downcase.strip.gsub(/[^0-9a-z ]/i, '').gsub(/\s+/, ' ')
+            isDimmable = determineIfDimmable(node["type"])
+            puts "Adding Device: [#{name}] [#{deviceId}] [#{isDimmable}]"
+            add(name, deviceId, isDimmable)
+        end
+    end
+    
+    # Add Scenes
+    nodes["group"].each do |group|
+        deviceId = group["address"].strip
+        
+        if (deviceId.match(/^\d+$/) && !deviceExists(deviceId)) 
+            name = group["name"].downcase.strip.gsub(/[^0-9a-z ]/i, '').gsub(/\s+/, ' ')
+            puts "Adding Scene: [#{name}] [#{deviceId}] [0]"
+            add(name, deviceId, "0")
+        end
+    end
+  end
+  
   # Returns a Device object based upon the Device Name or nil if no Device could be found
   def findDevice(deviceName)
     puts "findDevice(#{deviceName})"
@@ -36,6 +67,17 @@ class Devices
     return nil
   end
   
+  # Returns true if the DeviceID already exists in the Device List
+  def deviceExists(deviceId)
+    @devices.each_index do |i|
+        if (@devices[i][DEVICEID].match(/#{deviceId}/i))
+            return true
+        end
+    end
+    
+    return false  
+  end
+  
   # Returns a Device object based upon the index it was added to the class, starting with index 0. Returns nil if an invalid index is provided.
   #  => Use this for quick access to a device
   def getDevice(index)
@@ -44,6 +86,22 @@ class Devices
     else
         return nil
     end
+  end
+  
+  def formatDeviceId(address)
+    return address.strip.gsub(/\s+/, "%20")
+  end
+  
+  def determineIfDimmable(type)
+    if (type.strip.split(".").first == "1")
+        return 1
+    else
+        return 0
+    end
+  end
+  
+  def isControllable(type)
+    CONTROLLABLE.include?(type.strip.split(".").first)
   end
 end
 
@@ -269,41 +327,104 @@ class ElkZones
     def getStatus
         return Rest.get("#{Rest.instance.host}/rest/elk/get/status", :basic_auth => Rest.instance.auth)    
     end
+end
+
+class ElkZone
+    attr_reader :zoneId  
     
-    def armAway
-        areaCmdWithCode("arm?armType=1&")
+    def initialize(zone)
+        @zoneId = zone
+    end 
+    
+    def getVoltage
+        return zoneCmd("query/voltage")
     end
     
-    def armStay
-        areaCmdWithCode("arm?armType=2&")
+    def getTemperature
+        return zoneCmd("query/temperature")
     end
     
-    def armStayInstant
-        areaCmdWithCode("arm?armType=3&")
+    def open
+        zoneCmd("cmd/trigger/open")
     end
     
-    def armNight
-        areaCmdWithCode("arm?armType=4&")
+    def bypass
+        zoneCmdWithCode("cmd/toggle/bypass?")
     end
     
-    def armNightInstant
-        areaCmdWithCode("arm?armType=5&")
+    def zoneCmd(cmd)
+        return Rest.get("#{Rest.instance.host}/rest/elk/zones/#{@zoneId}/#{cmd}", :basic_auth => Rest.instance.auth)    
     end
     
-    def armVacation
-        areaCmdWithCode("arm?armType=6&")
+    def zoneCmdWithCode(cmd)
+        return zoneCmd("#{cmd}code=#{Rest.instance.elkCode}")
+    end
+end
+
+class ElkKeypad
+    attr_reader :keypadId
+    
+    def initialize(keypad)
+        @keypadId = keypad
     end
     
-    def disarm
-        areaCmdWithCode("disarm?")
+    def pressFuncKey(key)
+        if (key >= 1 && key <= 6 || key == 11 || key >= 20 && key <= 30)
+            keypadCmd("cmd/press/funcKey/#{key}")
+            return true
+        else
+            return false
+        end
     end
     
-    def areaCmd(cmd)
-        return Rest.get("#{Rest.instance.host}/rest/elk/area/#{@areaId}/cmd/#{cmd}", :basic_auth => Rest.instance.auth)    
+    def getTemperature
+        return keypadCmd("query/temperature")
     end
     
-    def areaCmdWithCode(cmd)
-        return areaCmd("#{cmd}code=#{Rest.instance.elkCode}")
+    def getStatus
+        return keypadCmd("get/status")
+    end 
+    
+    def keypadCmd(cmd)
+        return Rest.get("#{Rest.instance.host}/rest/elk/keypad/#{@keypadId}/#{cmd}", :basic_auth => Rest.instance.auth)    
+    end
+end
+
+class ElkOutput
+    attr_reader :outputId
+    
+    def initialize(output)
+        @outputId = output
+    end
+    
+    def getStatus
+        return outputCmd("get/status")
+    end
+    
+    def on
+        outputCmd("cmd/on")
+    end
+    
+    def onWithTimer(time)
+        outputCmd("cmd/on?offTimerSeconds=#{time}")
+    end
+    
+    def off
+        outputCmd("cmd/off")
+    end
+    
+    def outputCmd(cmd)
+        return Rest.get("#{Rest.instance.host}/rest/elk/output/#{@outputId}/#{cmd}", :basic_auth => Rest.instance.auth)    
+    end
+end
+
+class ElkVoice
+    def ElkVoice.speakWord(wordId)
+        Rest.get("#{Rest.instance.host}/rest/elk/speak/word/#{@wordId}", :basic_auth => Rest.instance.auth)    
+    end
+    
+    def ElkVoice.speakPhrase(phraseId)
+        Rest.get("#{Rest.instance.host}/rest/elk/speak/phrase/#{@phraseId}", :basic_auth => Rest.instance.auth)    
     end
 end
 =end
