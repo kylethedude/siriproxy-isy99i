@@ -1,7 +1,24 @@
+# == devices.rb
+# This file contains the various classes that can be used within the ISY-99i SiriProxy plugin to easily access and control the ISY-99i.
+
 require 'rubygems'
 require 'httparty'
 require 'singleton'
 
+#
+# A class that contains information about all the Devices to be controlled by the SiriProxy plugin. The Devices can be added manually or the class
+# can scan for available Devices.
+#
+# == Summary
+# For use with the SiriProxy plugin, this class is first utilized to setup all available ISY-99i Devices to be accessed via the Siri commands configured 
+# in the plugin. Once configured, a single Device Object can be easily obtained for further control or status commands.
+#
+# == Example - Auto Discover Devices
+#
+#   @myDevices = Devices.new
+#   @myDevices.addActiveDevices
+#   device = myDevices.findDevice("hall light")
+#
 class Devices
   # Index Constants
   DEVICENAME = 0
@@ -35,7 +52,7 @@ class Devices
     nodes["node"].each do |node|
         deviceId = formatDeviceId(node["address"])
         
-        if (node["enabled"] == "true" && !deviceExists(deviceId) && isControllable(node["type"])) 
+        if (node["enabled"] == "true" && !deviceExists(deviceId) && isControllable(node["type"]) && !node["name"].match(/^~/)) 
             name = node["name"].downcase.strip.gsub(/[^0-9a-z ]/i, '').gsub(/\s+/, ' ')
             isDimmable = determineIfDimmable(node["type"])
             puts "Adding Device: [#{name}] [#{deviceId}] [#{isDimmable}]"

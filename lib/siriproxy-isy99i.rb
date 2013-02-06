@@ -20,7 +20,7 @@ class SiriProxy::Plugin::Isy99i < SiriProxy::Plugin
     
     # Create an instance of the Devices Class to manage your devices. Pass in the devices set in the config.yml
     @myDevices = Devices.new(config["devices"])
-    myDevices.addActiveDevices
+    @myDevices.addActiveDevices
     
     puts "**[ISY-99i Module Loaded]**"
   end
